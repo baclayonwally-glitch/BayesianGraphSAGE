@@ -24,6 +24,29 @@ import { fetchRoute } from "@/lib/api";
 
 import { toast } from "sonner";
 
+import "leaflet/dist/leaflet.css";
+
+// =====================================================
+// FIX LEAFLET ICONS
+// =====================================================
+
+delete (L.Icon.Default.prototype as any)._getIconUrl;
+
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl:
+    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
+
+  iconUrl:
+    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
+
+  shadowUrl:
+    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+});
+
+// =====================================================
+// CUSTOM ICONS
+// =====================================================
+
 const greenIcon = new L.Icon({
   iconUrl:
     "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png",
@@ -48,6 +71,10 @@ const redIcon = new L.Icon({
   iconAnchor: [12, 41],
 });
 
+// =====================================================
+// MAP CLICK HANDLER
+// =====================================================
+
 function ClickHandler({
   origin,
   destination,
@@ -63,19 +90,32 @@ function ClickHandler({
         e.latlng.lng,
       ];
 
+      // First click = origin
       if (!origin) {
 
         setOrigin(coords);
 
+      // Second click = destination
       } else if (!destination) {
 
         setDestination(coords);
+
+      // Third click = reset origin
+      } else {
+
+        setOrigin(coords);
+
+        setDestination(null);
       }
     },
   });
 
   return null;
 }
+
+// =====================================================
+// MAIN COMPONENT
+// =====================================================
 
 export default function MapComponent() {
 
@@ -112,11 +152,22 @@ export default function MapComponent() {
   const [riskScore, setRiskScore] =
     useState(0);
 
+  const [backendMessage, setBackendMessage] =
+    useState("");
+
+  // =========================================
+  // FIX SSR ISSUE
+  // =========================================
+
   useEffect(() => {
     setMounted(true);
   }, []);
 
   if (!mounted) return null;
+
+  // =========================================
+  // CALCULATE ROUTE
+  // =========================================
 
   const calculateRoute = async () => {
 
@@ -133,10 +184,18 @@ export default function MapComponent() {
 
       setLoading(true);
 
+      setRoute([]);
+
+      setRiskEdges([]);
+
       const data = await fetchRoute(
         origin,
-        destination
+        destination,
+        model,
+        risk
       );
+
+      console.log("API RESPONSE:", data);
 
       setRoute(data.route || []);
 
@@ -156,15 +215,20 @@ export default function MapComponent() {
         data.risk_score || 0
       );
 
-      toast.success(
-        "Safe route generated."
+      setBackendMessage(
+        data.message || ""
       );
 
-    } catch (error) {
+      toast.success(
+        "Flood-aware route generated successfully."
+      );
+
+    } catch (error: any) {
 
       console.error(error);
 
       toast.error(
+        error.message ||
         "No safe route found."
       );
 
@@ -173,6 +237,10 @@ export default function MapComponent() {
       setLoading(false);
     }
   };
+
+  // =========================================
+  // RESET MAP
+  // =========================================
 
   const resetMap = () => {
 
@@ -189,10 +257,16 @@ export default function MapComponent() {
     setTravelTime(0);
 
     setRiskScore(0);
+
+    setBackendMessage("");
   };
 
   return (
-    <div className="relative h-screen w-full">
+    <div className="relative h-screen w-full overflow-hidden">
+
+      {/* ========================================= */}
+      {/* SIDEBAR */}
+      {/* ========================================= */}
 
       <Sidebar
         origin={origin}
@@ -209,19 +283,31 @@ export default function MapComponent() {
         riskScore={riskScore}
       />
 
+      {/* ========================================= */}
+      {/* MAP */}
+      {/* ========================================= */}
+
       <MapContainer
         center={[10.3157, 123.8854]}
         zoom={13}
         zoomControl={false}
-        className="h-screen w-full"
+        className="h-screen w-full z-0"
       >
 
         <ZoomControl position="bottomright" />
+
+        {/* ========================================= */}
+        {/* MAP STYLE */}
+        {/* ========================================= */}
 
         <TileLayer
           attribution="CartoDB Voyager"
           url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
         />
+
+        {/* ========================================= */}
+        {/* CLICK HANDLER */}
+        {/* ========================================= */}
 
         <ClickHandler
           origin={origin}
@@ -230,13 +316,16 @@ export default function MapComponent() {
           setDestination={setDestination}
         />
 
-        {/* FLOOD RISK ROADS */}
+        {/* ========================================= */}
+        {/* RISK EDGES */}
+        {/* ========================================= */}
 
         {riskEdges.map((edge, idx) => {
 
-          if (!edge || edge.length < 2) {
-            return null;
-          }
+          if (
+            !edge ||
+            edge.length < 2
+          ) return null;
 
           return (
             <Polyline
@@ -244,15 +333,47 @@ export default function MapComponent() {
               positions={edge}
               pathOptions={{
                 color: "#ef4444",
-                weight: 4,
-                opacity: 0.7,
-                dashArray: "8 10",
+                weight: 5,
+                opacity: 0.8,
+                dashArray: "10 10",
               }}
             />
           );
         })}
 
+        {/* ========================================= */}
+        {/* SAFE ROUTE */}
+        {/* ========================================= */}
+
+        {route.length > 0 && (
+          <>
+            {/* GLOW */}
+            <Polyline
+              positions={route}
+              pathOptions={{
+                color: "#06b6d4",
+                weight: 14,
+                opacity: 0.2,
+              }}
+            />
+
+            {/* MAIN */}
+            <Polyline
+              positions={route}
+              pathOptions={{
+                color: "#06b6d4",
+                weight: 7,
+                opacity: 1,
+                lineCap: "round",
+                lineJoin: "round",
+              }}
+            />
+          </>
+        )}
+
+        {/* ========================================= */}
         {/* ORIGIN */}
+        {/* ========================================= */}
 
         {origin && (
           <>
@@ -271,13 +392,15 @@ export default function MapComponent() {
               icon={greenIcon}
             >
               <Popup>
-                Origin
+                Origin Point
               </Popup>
             </Marker>
           </>
         )}
 
+        {/* ========================================= */}
         {/* DESTINATION */}
+        {/* ========================================= */}
 
         {destination && (
           <>
@@ -296,39 +419,17 @@ export default function MapComponent() {
               icon={redIcon}
             >
               <Popup>
-                Destination
+                Destination Point
               </Popup>
             </Marker>
           </>
         )}
 
-        {/* SAFE ROUTE */}
-
-        {route.length > 0 && (
-          <>
-            <Polyline
-              positions={route}
-              pathOptions={{
-                color: "#06b6d4",
-                weight: 14,
-                opacity: 0.2,
-              }}
-            />
-
-            <Polyline
-              positions={route}
-              pathOptions={{
-                color: "#06b6d4",
-                weight: 7,
-                opacity: 1,
-              }}
-            />
-          </>
-        )}
-
       </MapContainer>
 
+      {/* ========================================= */}
       {/* LEGEND */}
+      {/* ========================================= */}
 
       <div
         className="
@@ -337,12 +438,13 @@ export default function MapComponent() {
           right-5
           z-[1000]
           bg-white/95
+          backdrop-blur-md
           rounded-2xl
           shadow-2xl
           border
           border-slate-200
           p-4
-          w-[220px]
+          w-[230px]
         "
       >
 
@@ -355,7 +457,7 @@ export default function MapComponent() {
           <div className="flex items-center gap-3">
             <div className="w-6 h-2 rounded-full bg-cyan-500" />
 
-            <span>
+            <span className="text-slate-700">
               Safe Route
             </span>
           </div>
@@ -363,7 +465,7 @@ export default function MapComponent() {
           <div className="flex items-center gap-3">
             <div className="w-6 h-2 rounded-full bg-red-500" />
 
-            <span>
+            <span className="text-slate-700">
               Flood-Risk Roads
             </span>
           </div>
@@ -371,7 +473,7 @@ export default function MapComponent() {
           <div className="flex items-center gap-3">
             <div className="w-4 h-4 rounded-full bg-green-500" />
 
-            <span>
+            <span className="text-slate-700">
               Origin
             </span>
           </div>
@@ -379,7 +481,7 @@ export default function MapComponent() {
           <div className="flex items-center gap-3">
             <div className="w-4 h-4 rounded-full bg-red-400" />
 
-            <span>
+            <span className="text-slate-700">
               Destination
             </span>
           </div>
@@ -387,6 +489,30 @@ export default function MapComponent() {
         </div>
 
       </div>
+
+      {/* ========================================= */}
+      {/* BACKEND MESSAGE */}
+      {/* ========================================= */}
+
+      {backendMessage && (
+        <div
+          className="
+            absolute
+            top-5
+            right-5
+            z-[1000]
+            bg-cyan-500
+            text-white
+            px-5
+            py-3
+            rounded-2xl
+            shadow-xl
+            max-w-[400px]
+          "
+        >
+          {backendMessage}
+        </div>
+      )}
 
     </div>
   );
