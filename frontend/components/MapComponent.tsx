@@ -73,6 +73,12 @@ export default function MapComponent() {
     "Bayesian MC Dropout"
   );
 
+  const [distance, setDistance] = useState(0);
+
+  const [travelTime, setTravelTime] = useState(0);
+
+  const [riskScore, setRiskScore] = useState(0);
+
   const calculateRoute = async () => {
     if (!origin || !destination) return;
 
@@ -86,6 +92,28 @@ export default function MapComponent() {
 
       setRoute(data.route);
 
+      let totalDistance = 0;
+
+      for (let i = 0; i < data.route.length - 1; i++) {
+        const [lat1, lon1] = data.route[i];
+        const [lat2, lon2] = data.route[i + 1];
+
+        const dx = lat2 - lat1;
+        const dy = lon2 - lon1;
+
+        totalDistance += Math.sqrt(dx * dx + dy * dy);
+      }
+
+      const km = totalDistance * 111;
+
+      setDistance(km);
+
+      const estimatedMinutes = (km / 30) * 60;
+
+      setTravelTime(estimatedMinutes);
+
+      setRiskScore(risk);
+
       toast.success("Safe route generated.");
     } catch (err) {
       toast.error("No safe route found.");
@@ -98,6 +126,10 @@ export default function MapComponent() {
     setOrigin(null);
     setDestination(null);
     setRoute([]);
+
+    setDistance(0);
+    setTravelTime(0);
+    setRiskScore(0);
   };
 
   return (
@@ -112,6 +144,9 @@ export default function MapComponent() {
         setModel={setModel}
         onCalculate={calculateRoute}
         onReset={resetMap}
+        distance={distance}
+        travelTime={travelTime}
+        riskScore={riskScore}
       />
 
       <MapContainer
@@ -120,8 +155,8 @@ export default function MapComponent() {
         className="h-screen w-full"
       >
         <TileLayer
-  attribution="CartoDB"
-  url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+          attribution="CartoDB"
+          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
         />
 
         <ClickHandler
@@ -149,8 +184,9 @@ export default function MapComponent() {
           <Polyline
             positions={route}
             pathOptions={{
-              color: "#22d3ee",
-              weight: 6,
+              color: "#00e5ff",
+              weight: 7,
+              opacity: 0.9,
             }}
           />
         )}
