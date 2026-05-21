@@ -1,120 +1,160 @@
 "use client";
 
-import { motion } from "framer-motion";
-import { AlertTriangle, RotateCcw, Route } from "lucide-react";
+import {
+  MapContainer,
+  TileLayer,
+  Marker,
+  Polyline,
+  useMapEvents,
+} from "react-leaflet";
 
-interface Props {
-  origin: [number, number] | null;
-  destination: [number, number] | null;
-  loading: boolean;
-  risk: number;
-  setRisk: (value: number) => void;
-  model: string;
-  setModel: (value: string) => void;
-  onCalculate: () => void;
-  onReset: () => void;
-}
+import L from "leaflet";
+import { useState } from "react";
+import Sidebar from "./Sidebar";
+import { fetchRoute } from "@/lib/api";
+import { toast } from "sonner";
 
-export default function Sidebar({
+const greenIcon = new L.Icon({
+  iconUrl:
+    "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-green.png",
+  shadowUrl:
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png",
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+});
+
+const redIcon = new L.Icon({
+  iconUrl:
+    "https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-red.png",
+  shadowUrl:
+    "https://cdnjs.cloudflare.com/ajax/libs/leaflet/0.7.7/images/marker-shadow.png",
+  iconSize: [25, 41],
+  iconAnchor: [12, 41],
+});
+
+function ClickHandler({
   origin,
   destination,
-  loading,
-  risk,
-  setRisk,
-  model,
-  setModel,
-  onCalculate,
-  onReset,
-}: Props) {
+  setOrigin,
+  setDestination,
+}: any) {
+  useMapEvents({
+    click(e) {
+      const coords: [number, number] = [
+        e.latlng.lat,
+        e.latlng.lng,
+      ];
+
+      if (!origin) {
+        setOrigin(coords);
+      } else if (!destination) {
+        setDestination(coords);
+      }
+    },
+  });
+
+  return null;
+}
+
+export default function MapComponent() {
+  const [origin, setOrigin] =
+    useState<[number, number] | null>(null);
+
+  const [destination, setDestination] =
+    useState<[number, number] | null>(null);
+
+  const [route, setRoute] = useState<[number, number][]>([]);
+
+  const [loading, setLoading] = useState(false);
+
+  const [risk, setRisk] = useState(0.95);
+
+  const [model, setModel] = useState(
+    "Bayesian MC Dropout"
+  );
+
+  const calculateRoute = async () => {
+    if (!origin || !destination) return;
+
+    try {
+      setLoading(true);
+
+      const data = await fetchRoute(
+        origin,
+        destination
+      );
+
+      setRoute(data.route);
+
+      toast.success("Safe route generated.");
+    } catch (err) {
+      toast.error("No safe route found.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resetMap = () => {
+    setOrigin(null);
+    setDestination(null);
+    setRoute([]);
+  };
+
   return (
-    <motion.div
-      initial={{ x: -300 }}
-      animate={{ x: 0 }}
-      className="glass absolute z-[1000] left-4 top-4 w-[340px] rounded-2xl p-5 shadow-2xl"
-    >
-      <div className="flex items-center gap-2 mb-4">
-        <AlertTriangle className="text-cyan-400" />
-        <h1 className="text-xl font-bold">
-          Flood Routing AI
-        </h1>
-      </div>
+    <div className="relative h-screen w-full">
+      <Sidebar
+        origin={origin}
+        destination={destination}
+        loading={loading}
+        risk={risk}
+        setRisk={setRisk}
+        model={model}
+        setModel={setModel}
+        onCalculate={calculateRoute}
+        onReset={resetMap}
+      />
 
-      <div className="space-y-4">
-        <div>
-          <p className="text-sm text-gray-300">
-            Origin
-          </p>
+      <MapContainer
+        center={[10.3157, 123.8854]}
+        zoom={13}
+        className="h-screen w-full"
+      >
+        <TileLayer
+          attribution="OpenStreetMap"
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        />
 
-          <div className="text-xs mt-1 bg-slate-900 p-2 rounded-lg">
-            {origin
-              ? `${origin[0].toFixed(5)}, ${origin[1].toFixed(5)}`
-              : "Click map"}
-          </div>
-        </div>
+        <ClickHandler
+          origin={origin}
+          destination={destination}
+          setOrigin={setOrigin}
+          setDestination={setDestination}
+        />
 
-        <div>
-          <p className="text-sm text-gray-300">
-            Destination
-          </p>
-
-          <div className="text-xs mt-1 bg-slate-900 p-2 rounded-lg">
-            {destination
-              ? `${destination[0].toFixed(5)}, ${destination[1].toFixed(5)}`
-              : "Click map"}
-          </div>
-        </div>
-
-        <div>
-          <label className="text-sm">
-            Routing Model
-          </label>
-
-          <select
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
-            className="w-full mt-2 p-2 rounded-lg bg-slate-900"
-          >
-            <option>Baseline Dijkstra</option>
-            <option>Deterministic GraphSAGE</option>
-            <option>Bayesian MC Dropout</option>
-            <option>Variational Inference</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="text-sm">
-            Risk Aversion (CVaR β): {risk.toFixed(2)}
-          </label>
-
-          <input
-            type="range"
-            min="0.50"
-            max="0.99"
-            step="0.01"
-            value={risk}
-            onChange={(e) => setRisk(Number(e.target.value))}
-            className="w-full"
+        {origin && (
+          <Marker
+            position={origin}
+            icon={greenIcon}
           />
-        </div>
+        )}
 
-        <button
-          onClick={onCalculate}
-          disabled={loading || !origin || !destination}
-          className="w-full bg-cyan-500 hover:bg-cyan-400 transition rounded-xl py-3 flex items-center justify-center gap-2"
-        >
-          <Route size={18} />
+        {destination && (
+          <Marker
+            position={destination}
+            icon={redIcon}
+          />
+        )}
 
-          {loading ? "Calculating..." : "Calculate Safe Route"}
-        </button>
-
-        <button
-          onClick={onReset}
-          className="w-full bg-red-500 hover:bg-red-400 transition rounded-xl py-3 flex items-center justify-center gap-2"
-        >
-          <RotateCcw size={18} />
-          Reset
-        </button>
-      </div>
-    </motion.div>
+        {route.length > 0 && (
+          <Polyline
+            positions={route}
+            pathOptions={{
+              color: "#22d3ee",
+              weight: 6,
+            }}
+          />
+        )}
+      </MapContainer>
+    </div>
   );
 }
