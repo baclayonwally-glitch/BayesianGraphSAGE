@@ -1,28 +1,28 @@
 "use client";
 
-import { motion } from "framer-motion";
-import {
-  AlertTriangle,
-  RotateCcw,
-  Route,
-  ShieldAlert,
-  Timer,
-  Map,
-} from "lucide-react";
-
 interface Props {
   origin: [number, number] | null;
+
   destination: [number, number] | null;
+
   loading: boolean;
+
   risk: number;
+
   setRisk: (value: number) => void;
+
   model: string;
+
   setModel: (value: string) => void;
+
   onCalculate: () => void;
+
   onReset: () => void;
 
   distance: number;
+
   travelTime: number;
+
   riskScore: number;
 }
 
@@ -41,100 +41,101 @@ export default function Sidebar({
   riskScore,
 }: Props) {
   return (
-    <motion.div
-      initial={{ x: -300, opacity: 0 }}
-      animate={{ x: 0, opacity: 1 }}
-      transition={{ duration: 0.5 }}
+    <div
       className="
-        glass
         absolute
-        z-[1000]
-        left-4
         top-4
+        left-4
+        z-[1000]
         w-[360px]
+        bg-white/95
+        backdrop-blur-md
         rounded-3xl
-        p-6
         shadow-2xl
         border
-        border-cyan-500/20
+        border-slate-200
+        p-6
       "
     >
-      <div className="flex items-center gap-3 mb-6">
-        <div className="bg-cyan-500/20 p-3 rounded-2xl">
-          <AlertTriangle className="text-cyan-400" />
-        </div>
+      <h1 className="text-3xl font-bold text-slate-800">
+        Flood Routing AI
+      </h1>
 
-        <div>
-          <h1 className="text-2xl font-bold">
-            Flood Routing AI
-          </h1>
-
-          <p className="text-xs text-slate-400">
-            Bayesian Risk-Aware Navigation
-          </p>
-        </div>
-      </div>
+      <p className="text-sm text-slate-500 mt-1 mb-6">
+        Bayesian Risk-Aware Navigation
+      </p>
 
       <div className="space-y-5">
-        <div>
-          <p className="text-sm text-slate-300 mb-1">
-            Origin
-          </p>
 
-          <div className="text-xs bg-slate-900/80 border border-slate-700 p-3 rounded-xl">
+        <div>
+          <label className="text-sm font-semibold text-slate-700">
+            Origin
+          </label>
+
+          <div className="bg-slate-100 rounded-2xl p-3 mt-2 text-sm">
             {origin
               ? `${origin[0].toFixed(5)}, ${origin[1].toFixed(5)}`
-              : "Click on map"}
+              : "Click map"}
           </div>
         </div>
 
         <div>
-          <p className="text-sm text-slate-300 mb-1">
+          <label className="text-sm font-semibold text-slate-700">
             Destination
-          </p>
+          </label>
 
-          <div className="text-xs bg-slate-900/80 border border-slate-700 p-3 rounded-xl">
+          <div className="bg-slate-100 rounded-2xl p-3 mt-2 text-sm">
             {destination
               ? `${destination[0].toFixed(5)}, ${destination[1].toFixed(5)}`
-              : "Click on map"}
+              : "Click map"}
           </div>
         </div>
 
         <div>
-          <label className="text-sm text-slate-300">
+          <label className="text-sm font-semibold text-slate-700">
             Routing Model
           </label>
 
           <select
             value={model}
-            onChange={(e) => setModel(e.target.value)}
+            onChange={(e) =>
+              setModel(e.target.value)
+            }
             className="
               w-full
               mt-2
               p-3
-              rounded-xl
-              bg-slate-900/80
+              rounded-2xl
               border
-              border-slate-700
-              text-sm
+              border-slate-300
+              bg-white
             "
           >
-            <option>Baseline Dijkstra</option>
-            <option>Deterministic GraphSAGE</option>
-            <option>Bayesian MC Dropout</option>
-            <option>Variational Inference</option>
+            <option>
+              Baseline Dijkstra
+            </option>
+
+            <option>
+              Deterministic GraphSAGE
+            </option>
+
+            <option>
+              Bayesian MC Dropout
+            </option>
+
+            <option>
+              Variational Inference
+            </option>
           </select>
         </div>
 
         <div>
-          <label className="text-sm text-slate-300">
+          <label className="text-sm font-semibold text-slate-700">
             Risk Aversion (CVaR β)
           </label>
 
-          <div className="flex justify-between text-xs text-cyan-400 mt-1 mb-2">
-            <span>Low Risk</span>
-            <span>{risk.toFixed(2)}</span>
-            <span>High Safety</span>
+          <div className="text-cyan-600 font-bold mt-1">
+            {risk.toFixed(2)}
           </div>
 
           <input
@@ -143,87 +144,69 @@ export default function Sidebar({
             max="0.99"
             step="0.01"
             value={risk}
-            onChange={(e) => setRisk(Number(e.target.value))}
-            className="w-full accent-cyan-400"
+            onChange={(e) =>
+              setRisk(Number(e.target.value))
+            }
+            className="w-full mt-2"
           />
         </div>
 
-        <div className="bg-slate-900/70 border border-slate-700 rounded-2xl p-4 space-y-3">
-          <div className="flex items-center gap-2 mb-2">
-            <ShieldAlert
-              size={18}
-              className="text-cyan-400"
-            />
+        <div className="bg-slate-100 rounded-3xl p-4">
 
-            <h2 className="font-semibold text-cyan-400">
-              Route Analytics
-            </h2>
-          </div>
+          <h2 className="font-bold text-slate-800 mb-4">
+            Route Analytics
+          </h2>
 
-          <div className="flex justify-between items-center text-sm">
-            <div className="flex items-center gap-2">
-              <Map size={16} />
+          <div className="space-y-3 text-sm">
+
+            <div className="flex justify-between">
               <span>Distance</span>
+
+              <span className="font-semibold">
+                {distance.toFixed(2)} km
+              </span>
             </div>
 
-            <span className="font-medium">
-              {distance.toFixed(2)} km
-            </span>
-          </div>
-
-          <div className="flex justify-between items-center text-sm">
-            <div className="flex items-center gap-2">
-              <Timer size={16} />
+            <div className="flex justify-between">
               <span>Travel Time</span>
+
+              <span className="font-semibold">
+                {travelTime.toFixed(1)} mins
+              </span>
             </div>
 
-            <span className="font-medium">
-              {travelTime.toFixed(1)} mins
-            </span>
+            <div className="flex justify-between">
+              <span>Risk Score</span>
+
+              <span className="font-semibold text-red-500">
+                {riskScore.toFixed(3)}
+              </span>
+            </div>
+
           </div>
 
-          <div className="flex justify-between items-center text-sm">
-            <span>Risk Score</span>
-
-            <span className="font-medium text-cyan-400">
-              {riskScore.toFixed(2)}
-            </span>
-          </div>
-
-          <div className="flex justify-between items-center text-sm">
-            <span>Model</span>
-
-            <span className="font-medium text-right text-xs">
-              {model}
-            </span>
-          </div>
         </div>
 
         <button
           onClick={onCalculate}
-          disabled={loading || !origin || !destination}
+          disabled={
+            loading ||
+            !origin ||
+            !destination
+          }
           className="
             w-full
             bg-cyan-500
-            hover:bg-cyan-400
-            disabled:bg-slate-700
-            transition-all
-            duration-300
-            rounded-2xl
+            hover:bg-cyan-600
+            text-white
+            font-bold
             py-4
-            flex
-            items-center
-            justify-center
-            gap-2
-            font-semibold
-            shadow-lg
-            shadow-cyan-500/20
+            rounded-2xl
+            transition
           "
         >
-          <Route size={18} />
-
           {loading
-            ? "Calculating Safe Route..."
+            ? "Calculating..."
             : "Calculate Safe Route"}
         </button>
 
@@ -231,23 +214,19 @@ export default function Sidebar({
           onClick={onReset}
           className="
             w-full
-            bg-red-500/90
-            hover:bg-red-400
-            transition-all
-            duration-300
-            rounded-2xl
+            bg-red-500
+            hover:bg-red-600
+            text-white
+            font-bold
             py-4
-            flex
-            items-center
-            justify-center
-            gap-2
-            font-semibold
+            rounded-2xl
+            transition
           "
         >
-          <RotateCcw size={18} />
-          Reset Map
+          Reset
         </button>
+
       </div>
-    </motion.div>
+    </div>
   );
 }
