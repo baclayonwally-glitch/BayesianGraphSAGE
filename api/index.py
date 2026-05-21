@@ -156,6 +156,10 @@ class RouteRequest(BaseModel):
     origin: Tuple[float, float]
     destination: Tuple[float, float]
 
+    model: str = "Bayesian MC Dropout"
+
+    risk: float = 0.95
+
 
 # ==========================================
 # 3. PATHS
@@ -434,6 +438,10 @@ def predict_route(req: RouteRequest):
         if dest_node.endswith(".0"):
             dest_node = dest_node[:-2]
 
+        global CVAR_BETA
+
+        CVAR_BETA = req.risk
+        
         # ----------------------------------
         # Compute safest path
         # ----------------------------------
