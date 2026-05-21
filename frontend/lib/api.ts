@@ -26,8 +26,17 @@ export async function fetchRoute(
   );
 
   if (!response.ok) {
-    throw new Error("No route found.");
+
+    const err = await response.json();
+
+    throw new Error(
+      err.detail || "Route generation failed."
+    );
   }
 
-  return response.json();
+  const data = await response.json();
+
+  console.log("BACKEND RESPONSE:", data);
+
+  return data;
 }
