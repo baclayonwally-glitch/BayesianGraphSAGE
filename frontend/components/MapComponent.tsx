@@ -65,6 +65,10 @@ export default function MapComponent() {
 
   const [route, setRoute] = useState<[number, number][]>([]);
 
+  const [riskEdges, setRiskEdges] = useState<
+    [[number, number], [number, number]][]
+  >([]);
+
   const [loading, setLoading] = useState(false);
 
   const [risk, setRisk] = useState(0.95);
@@ -92,27 +96,13 @@ export default function MapComponent() {
 
       setRoute(data.route);
 
-      let totalDistance = 0;
+      setRiskEdges(data.risk_edges);
 
-      for (let i = 0; i < data.route.length - 1; i++) {
-        const [lat1, lon1] = data.route[i];
-        const [lat2, lon2] = data.route[i + 1];
+      setDistance(data.distance_km);
 
-        const dx = lat2 - lat1;
-        const dy = lon2 - lon1;
+      setTravelTime(data.estimated_time_min);
 
-        totalDistance += Math.sqrt(dx * dx + dy * dy);
-      }
-
-      const km = totalDistance * 111;
-
-      setDistance(km);
-
-      const estimatedMinutes = (km / 30) * 60;
-
-      setTravelTime(estimatedMinutes);
-
-      setRiskScore(risk);
+      setRiskScore(data.risk_score);
 
       toast.success("Safe route generated.");
     } catch (err) {
@@ -126,7 +116,7 @@ export default function MapComponent() {
     setOrigin(null);
     setDestination(null);
     setRoute([]);
-
+    setRiskEdges([]);
     setDistance(0);
     setTravelTime(0);
     setRiskScore(0);
@@ -166,6 +156,18 @@ export default function MapComponent() {
           setDestination={setDestination}
         />
 
+        {riskEdges.map((edge, idx) => (
+          <Polyline
+            key={idx}
+            positions={edge}
+            pathOptions={{
+              color: "#ff3b30",
+              weight: 5,
+              opacity: 0.7,
+            }}
+          />
+        ))}
+
         {origin && (
           <Marker
             position={origin}
@@ -186,7 +188,7 @@ export default function MapComponent() {
             pathOptions={{
               color: "#00e5ff",
               weight: 7,
-              opacity: 0.9,
+              opacity: 1,
             }}
           />
         )}
