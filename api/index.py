@@ -17,10 +17,27 @@ import warnings
 warnings.filterwarnings("ignore")
 
 # =====================================================
-# 1. MODEL DEFINITION
+# FASTAPI APP
+# =====================================================
+
+app = FastAPI(
+    title="Flood Routing AI API"
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# =====================================================
+# MODEL
 # =====================================================
 
 class GraphSAGEGRU(nn.Module):
+
     def __init__(
         self,
         node_in_dim,
@@ -81,6 +98,7 @@ class GraphSAGEGRU(nn.Module):
         edge_label_index,
         edge_attr_seq,
     ):
+
         L, N, _ = x_seq.shape
 
         node_embeds = []
@@ -162,24 +180,7 @@ class GraphSAGEGRU(nn.Module):
 
 
 # =====================================================
-# 2. FASTAPI SETUP
-# =====================================================
-
-app = FastAPI(
-    title="Flood Routing AI API"
-)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-
-# =====================================================
-# 3. REQUEST MODEL
+# REQUEST MODEL
 # =====================================================
 
 class RouteRequest(BaseModel):
@@ -194,7 +195,7 @@ class RouteRequest(BaseModel):
 
 
 # =====================================================
-# 4. FILE PATHS
+# PATHS
 # =====================================================
 
 BASE_DIR = os.path.dirname(
@@ -230,9 +231,8 @@ EDGES_PATH = os.path.join(
 
 device = torch.device("cpu")
 
-
 # =====================================================
-# 5. GLOBAL VARIABLES
+# GLOBALS
 # =====================================================
 
 model = None
@@ -251,9 +251,8 @@ CVAR_BETA = 0.95
 
 ASSUME_BIDIRECTIONAL = False
 
-
 # =====================================================
-# 6. BUILD ROUTING GRAPH
+# BUILD GRAPH
 # =====================================================
 
 def build_routing_graph(
@@ -283,25 +282,50 @@ def build_routing_graph(
         if v.endswith(".0"):
             v = v[:-2]
 
-        base_time = float(
-            row.get(
-                "travel_time",
-                row["length"]
-                / (30 * 1000 / 3600),
-            )
+        # =================================
+        # FORCE LENGTH
+        # =================================
+
+        length_m = float(
+            row.get("length", 100)
         )
+
+        # =================================
+        # FORCE TRAVEL TIME
+        # =================================
+
+        if (
+            "travel_time" in row
+            and row["travel_time"] is not None
+            and not np.isnan(row["travel_time"])
+        ):
+
+            base_time = float(
+                row["travel_time"]
+            )
+
+        else:
+
+            # fallback
+            base_time = (
+                length_m / 8.33
+            )
+
+        # =================================
+        # RISK VALUES
+        # =================================
 
         mu = float(
             row.get(
                 penalty_col,
-                0.0,
+                0.05,
             )
         )
 
         sigma = float(
             row.get(
                 uncertainty_col,
-                0.0,
+                0.02,
             )
         )
 
@@ -328,7 +352,7 @@ def build_routing_graph(
         )
 
         edge_attrs = dict(
-            length=float(row["length"]),
+            length=length_m,
             travel_time=base_time,
             planned_cost=planned_cost,
             planned_penalty=planned_penalty,
@@ -370,11 +394,11 @@ def build_routing_graph(
 
 
 # =====================================================
-# 7. STARTUP LOADING
+# STARTUP
 # =====================================================
 
 @app.on_event("startup")
-def load_resources():
+def startup_event():
 
     global model
 
@@ -388,17 +412,19 @@ def load_resources():
 
     try:
 
-        print("Loading GeoDataFrames...")
+        print("Loading nodes...")
 
         nodes_gdf = gpd.read_file(
             NODES_PATH
         )
 
+        print("Loading edges...")
+
         edges_gdf = gpd.read_file(
             EDGES_PATH
         )
 
-        print("Converting nodes to WGS84...")
+        print("Converting CRS...")
 
         nodes_wgs84 = nodes_gdf.to_crs(
             "EPSG:4326"
@@ -406,14 +432,14 @@ def load_resources():
 
         for _, row in nodes_wgs84.iterrows():
 
-            n_id = str(row["osmid"])
+            node_id = str(row["osmid"])
 
-            if n_id.endswith(".0"):
-                n_id = n_id[:-2]
+            if node_id.endswith(".0"):
+                node_id = node_id[:-2]
 
-            osmid_to_latlon[n_id] = (
-                row["geometry"].y,
-                row["geometry"].x,
+            osmid_to_latlon[node_id] = (
+                row.geometry.y,
+                row.geometry.x,
             )
 
         print("Loading tensors...")
@@ -458,12 +484,12 @@ def load_resources():
     except Exception as e:
 
         print(
-            f"Startup error: {str(e)}"
+            f"STARTUP ERROR: {str(e)}"
         )
 
 
 # =====================================================
-# 8. ROOT ROUTE
+# ROOT
 # =====================================================
 
 @app.get("/")
@@ -471,12 +497,12 @@ def root():
 
     return {
         "message":
-            "Flood Routing ML Backend is running!"
+            "Flood Routing Backend Running"
     }
 
 
 # =====================================================
-# 9. PREDICT ROUTE
+# ROUTING ENDPOINT
 # =====================================================
 
 @app.post("/predict_route")
@@ -486,35 +512,25 @@ def predict_route(
 
     global CVAR_BETA
 
-    if (
-        nodes_gdf is None
-        or edges_gdf is None
-    ):
-
-        raise HTTPException(
-            status_code=503,
-            detail="Data not loaded.",
-        )
-
     try:
 
-        # =========================================
-        # UPDATE RISK LEVEL
-        # =========================================
+        # =================================
+        # UPDATE CVAR
+        # =================================
 
         CVAR_BETA = req.risk
 
-        # =========================================
-        # DYNAMIC GRAPH
-        # =========================================
+        # =================================
+        # REBUILD GRAPH
+        # =================================
 
         R_dynamic = build_routing_graph(
             edges_gdf
         )
 
-        # =========================================
-        # CONVERT CLICK POINTS
-        # =========================================
+        # =================================
+        # POINTS
+        # =================================
 
         orig_pt = gpd.GeoSeries(
             [
@@ -540,9 +556,9 @@ def predict_route(
             nodes_gdf.crs
         ).iloc[0]
 
-        # =========================================
+        # =================================
         # NEAREST NODES
-        # =========================================
+        # =================================
 
         orig_idx = (
             nodes_gdf.geometry.distance(
@@ -570,9 +586,9 @@ def predict_route(
         if dest_node.endswith(".0"):
             dest_node = dest_node[:-2]
 
-        # =========================================
-        # COMPUTE ROUTE
-        # =========================================
+        # =================================
+        # SHORTEST PATH
+        # =================================
 
         route_nodes = nx.shortest_path(
             R_dynamic,
@@ -581,9 +597,9 @@ def predict_route(
             weight="planned_cost",
         )
 
-        # =========================================
-        # ROUTE COORDINATES
-        # =========================================
+        # =================================
+        # ROUTE COORDS
+        # =================================
 
         route_coords = []
 
@@ -595,17 +611,17 @@ def predict_route(
                     osmid_to_latlon[n]
                 )
 
-        # =========================================
-        # ROUTE RISK EDGES
-        # =========================================
+        # =================================
+        # ANALYTICS
+        # =================================
 
-        risk_edges = []
+        distance_km = 0.0
 
-        distance_km = 0
-
-        total_travel_time = 0
+        estimated_time_min = 0.0
 
         risk_values = []
+
+        risk_edges = []
 
         for i in range(
             len(route_nodes) - 1
@@ -629,32 +645,54 @@ def predict_route(
                 edge_data.values()
             )[0]
 
-            length_m = edge_attrs.get(
-                "length",
-                0,
-            )
+            # =============================
+            # DISTANCE
+            # =============================
 
-            travel_time = edge_attrs.get(
-                "travel_time",
-                0,
-            )
-
-            penalty = edge_attrs.get(
-                "planned_penalty",
-                0,
+            edge_length = float(
+                edge_attrs.get(
+                    "length",
+                    0,
+                )
             )
 
             distance_km += (
-                length_m / 1000
+                edge_length / 1000
             )
 
-            total_travel_time += (
-                travel_time / 60
+            # =============================
+            # TRAVEL TIME
+            # =============================
+
+            edge_time = float(
+                edge_attrs.get(
+                    "travel_time",
+                    0,
+                )
+            )
+
+            estimated_time_min += (
+                edge_time / 60
+            )
+
+            # =============================
+            # RISK
+            # =============================
+
+            penalty = float(
+                edge_attrs.get(
+                    "planned_penalty",
+                    0,
+                )
             )
 
             risk_values.append(
                 penalty
             )
+
+            # =============================
+            # HIGH RISK
+            # =============================
 
             if penalty > 0.2:
 
@@ -668,23 +706,29 @@ def predict_route(
                         osmid_to_latlon[v],
                     ])
 
-        # =========================================
-        # AVERAGE RISK
-        # =========================================
+        # =================================
+        # FINAL RISK SCORE
+        # =================================
 
         if len(risk_values) > 0:
 
-            avg_risk = float(
+            risk_score = float(
                 np.mean(risk_values)
             )
 
         else:
 
-            avg_risk = 0.0
+            risk_score = 0.0
 
-        # =========================================
+        print("===================================")
+        print("DISTANCE:", distance_km)
+        print("TIME:", estimated_time_min)
+        print("RISK:", risk_score)
+        print("===================================")
+
+        # =================================
         # RESPONSE
-        # =========================================
+        # =================================
 
         return {
 
@@ -694,19 +738,25 @@ def predict_route(
 
             "risk_edges": risk_edges,
 
-            "distance_km": round(
-                distance_km,
-                2,
+            "distance_km": float(
+                round(
+                    distance_km,
+                    2,
+                )
             ),
 
-            "estimated_time_min": round(
-                total_travel_time,
-                1,
+            "estimated_time_min": float(
+                round(
+                    estimated_time_min,
+                    2,
+                )
             ),
 
-            "risk_score": round(
-                avg_risk,
-                3,
+            "risk_score": float(
+                round(
+                    risk_score,
+                    3,
+                )
             ),
 
             "model_used": req.model,
@@ -714,16 +764,15 @@ def predict_route(
             "risk_beta": req.risk,
 
             "message":
-                f"Safest route computed "
-                f"from {orig_node} "
-                f"to {dest_node}",
+                f"Safe route generated "
+                f"using {req.model}",
         }
 
     except nx.NetworkXNoPath:
 
         raise HTTPException(
             status_code=404,
-            detail="No safe path found.",
+            detail="No safe route found.",
         )
 
     except Exception as e:
