@@ -120,8 +120,8 @@ export default function MapComponent() {
         className="h-screen w-full"
       >
         <TileLayer
-          attribution="OpenStreetMap"
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+  attribution="CartoDB"
+  url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
         />
 
         <ClickHandler
