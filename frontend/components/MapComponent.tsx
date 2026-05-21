@@ -132,7 +132,9 @@ export default function MapComponent() {
     useState<[number, number][]>([]);
 
   const [riskEdges, setRiskEdges] =
-    useState<any[]>([]);
+    useState<
+      [[number, number], [number, number]][]
+    >([]);
 
   const [loading, setLoading] =
     useState(false);
@@ -169,74 +171,114 @@ export default function MapComponent() {
   // CALCULATE ROUTE
   // =========================================
 
-  const calculateRoute = async () => {
+ const calculateRoute = async () => {
 
-    if (!origin || !destination) {
+  if (!origin || !destination) {
 
-      toast.error(
-        "Please select origin and destination."
-      );
+    toast.error(
+      "Please select origin and destination."
+    );
 
-      return;
-    }
+    return;
+  }
 
-    try {
+  try {
 
-      setLoading(true);
+    setLoading(true);
 
-      setRoute([]);
+    setRoute([]);
 
-      setRiskEdges([]);
+    setRiskEdges([]);
 
-      const data = await fetchRoute(
-        origin,
-        destination,
-        model,
-        risk
-      );
+    const data = await fetchRoute(
+      origin,
+      destination,
+      model,
+      risk
+    );
 
-      console.log("API RESPONSE:", data);
+    // =====================================
+    // DEBUG RESPONSE
+    // =====================================
 
-      setRoute(data.route || []);
+    console.log(
+      "FULL BACKEND RESPONSE:",
+      data
+    );
 
-      setRiskEdges(
-        data.risk_edges || []
-      );
+    console.log(
+      "DISTANCE:",
+      data.distance_km
+    );
 
-      setDistance(
-        data.distance_km || 0
-      );
+    console.log(
+      "TRAVEL TIME:",
+      data.estimated_time_min
+    );
 
-      setTravelTime(
-        data.estimated_time_min || 0
-      );
+    console.log(
+      "RISK SCORE:",
+      data.risk_score
+    );
 
-      setRiskScore(
-        data.risk_score || 0
-      );
+    // =====================================
+    // UPDATE MAP
+    // =====================================
 
-      setBackendMessage(
-        data.message || ""
-      );
+    setRoute(
+      Array.isArray(data.route)
+        ? data.route
+        : []
+    );
 
-      toast.success(
-        "Flood-aware route generated successfully."
-      );
+    setRiskEdges(
+      Array.isArray(data.risk_edges)
+        ? data.risk_edges
+        : []
+    );
 
-    } catch (error: any) {
+    // =====================================
+    // UPDATE ANALYTICS
+    // =====================================
 
-      console.error(error);
+    setDistance(
+      Number(data.distance_km) || 0
+    );
 
-      toast.error(
-        error.message ||
-        "No safe route found."
-      );
+    setTravelTime(
+      Number(data.estimated_time_min) || 0
+    );
 
-    } finally {
+    setRiskScore(
+      Number(data.risk_score) || 0
+    );
 
-      setLoading(false);
-    }
-  };
+    // =====================================
+    // BACKEND MESSAGE
+    // =====================================
+
+    setBackendMessage(
+      data.message || ""
+    );
+
+    toast.success(
+      "Flood-aware route generated successfully."
+    );
+
+  } catch (error: any) {
+
+    console.error(error);
+
+    toast.error(
+      error.message ||
+      "No safe route found."
+    );
+
+  } finally {
+
+    setLoading(false);
+  }
+};
 
   // =========================================
   // RESET MAP
