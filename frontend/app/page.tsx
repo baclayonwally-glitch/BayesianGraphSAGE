@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+
 import { Toaster } from "sonner";
 
 const MapComponent = dynamic(
