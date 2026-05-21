@@ -14,11 +14,12 @@ from shapely.geometry import Point
 from scipy.stats import norm
 import warnings
 
-warnings.filterwarnings('ignore')
+warnings.filterwarnings("ignore")
 
-# ==========================================
+# =====================================================
 # 1. MODEL DEFINITION
-# ==========================================
+# =====================================================
+
 class GraphSAGEGRU(nn.Module):
     def __init__(
         self,
@@ -26,36 +27,49 @@ class GraphSAGEGRU(nn.Module):
         edge_in_dim,
         hidden_dim=64,
         gru_dim=64,
-        dropout=0.3
+        dropout=0.3,
     ):
         super().__init__()
 
         self.sage1 = SAGEConv(
             node_in_dim,
-            hidden_dim
+            hidden_dim,
         )
 
         self.sage2 = SAGEConv(
             hidden_dim,
-            hidden_dim
+            hidden_dim,
         )
 
         self.gru = nn.GRU(
             input_size=hidden_dim,
             hidden_size=gru_dim,
-            batch_first=True
+            batch_first=True,
         )
 
         self.edge_mlp = nn.Sequential(
-            nn.Linear((gru_dim * 2) + edge_in_dim, 128),
+            nn.Linear(
+                (gru_dim * 2) + edge_in_dim,
+                128,
+            ),
+
             nn.Dropout(dropout),
+
             nn.ReLU(),
 
-            nn.Linear(128, 64),
+            nn.Linear(
+                128,
+                64,
+            ),
+
             nn.Dropout(dropout),
+
             nn.ReLU(),
 
-            nn.Linear(64, 1)
+            nn.Linear(
+                64,
+                1,
+            ),
         )
 
         self.dropout = dropout
@@ -65,37 +79,38 @@ class GraphSAGEGRU(nn.Module):
         x_seq,
         message_edge_index,
         edge_label_index,
-        edge_attr_seq
+        edge_attr_seq,
     ):
         L, N, _ = x_seq.shape
 
         node_embeds = []
 
         for t in range(L):
+
             x_t = x_seq[t]
 
             h = self.sage1(
                 x_t,
-                message_edge_index
+                message_edge_index,
             )
 
             h = F.dropout(
                 h,
                 p=self.dropout,
-                training=self.training
+                training=self.training,
             )
 
             h = F.relu(h)
 
             h = self.sage2(
                 h,
-                message_edge_index
+                message_edge_index,
             )
 
             h = F.dropout(
                 h,
                 p=self.dropout,
-                training=self.training
+                training=self.training,
             )
 
             h = F.relu(h)
@@ -104,7 +119,7 @@ class GraphSAGEGRU(nn.Module):
 
         node_seq = torch.stack(
             node_embeds,
-            dim=0
+            dim=0,
         ).permute(1, 0, 2)
 
         gru_out, _ = self.gru(node_seq)
@@ -114,34 +129,44 @@ class GraphSAGEGRU(nn.Module):
         node_final = F.dropout(
             node_final,
             p=self.dropout,
-            training=self.training
+            training=self.training,
         )
 
         u = edge_label_index[0]
+
         v = edge_label_index[1]
 
         edge_node_emb = torch.cat(
-            [node_final[u], node_final[v]],
-            dim=1
+            [
+                node_final[u],
+                node_final[v],
+            ],
+            dim=1,
         )
 
         edge_attr_last = edge_attr_seq[-1]
 
         edge_input = torch.cat(
-            [edge_node_emb, edge_attr_last],
-            dim=1
+            [
+                edge_node_emb,
+                edge_attr_last,
+            ],
+            dim=1,
         )
 
-        pred = self.edge_mlp(edge_input).squeeze()
+        pred = self.edge_mlp(
+            edge_input
+        ).squeeze()
 
         return pred
 
 
-# ==========================================
-# 2. API SETUP
-# ==========================================
+# =====================================================
+# 2. FASTAPI SETUP
+# =====================================================
+
 app = FastAPI(
-    title="Intelligent Flood Routing API"
+    title="Flood Routing AI API"
 )
 
 app.add_middleware(
@@ -152,8 +177,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+# =====================================================
+# 3. REQUEST MODEL
+# =====================================================
+
 class RouteRequest(BaseModel):
+
     origin: Tuple[float, float]
+
     destination: Tuple[float, float]
 
     model: str = "Bayesian MC Dropout"
@@ -161,126 +193,158 @@ class RouteRequest(BaseModel):
     risk: float = 0.95
 
 
-# ==========================================
-# 3. PATHS
-# ==========================================
+# =====================================================
+# 4. FILE PATHS
+# =====================================================
+
 BASE_DIR = os.path.dirname(
-    os.path.dirname(os.path.abspath(__file__))
+    os.path.dirname(
+        os.path.abspath(__file__)
+    )
 )
 
 DATA_DIR = os.path.join(
     BASE_DIR,
-    "outputs"
+    "outputs",
 )
 
 MODEL_PATH = os.path.join(
     DATA_DIR,
-    "best_bayesian_graphsage_gru_mc_dropout_weighted_huber_fixed.pt"
+    "best_bayesian_graphsage_gru_mc_dropout_weighted_huber_fixed.pt",
 )
 
 TENSORS_PATH = os.path.join(
     DATA_DIR,
-    "graph_tensors_nc_snapshots.pt"
+    "graph_tensors_nc_snapshots.pt",
 )
 
 NODES_PATH = os.path.join(
     DATA_DIR,
-    "processed_nodes.gpkg"
+    "processed_nodes.gpkg",
 )
 
 EDGES_PATH = os.path.join(
     DATA_DIR,
-    "processed_edges.gpkg"
+    "processed_edges.gpkg",
 )
 
 device = torch.device("cpu")
 
 
-# ==========================================
-# 4. GLOBAL STATE
-# ==========================================
+# =====================================================
+# 5. GLOBAL VARIABLES
+# =====================================================
+
 model = None
+
 nodes_gdf = None
+
 edges_gdf = None
-osmid_to_latlon = {}
+
 tensors = None
-R_interactive = None
+
+osmid_to_latlon = {}
 
 ROUTING_ALPHA = 50.0
+
 CVAR_BETA = 0.95
+
 ASSUME_BIDIRECTIONAL = False
 
 
-# ==========================================
-# 5. BUILD ROUTING GRAPH
-# ==========================================
+# =====================================================
+# 6. BUILD ROUTING GRAPH
+# =====================================================
+
 def build_routing_graph(
     edges_input_gdf,
     penalty_col="pred_flood_penalty",
-    uncertainty_col="uncertainty"
+    uncertainty_col="uncertainty",
 ):
+
     R = nx.MultiDiGraph()
 
     z = norm.ppf(CVAR_BETA)
 
     cvar_multiplier = (
-        norm.pdf(z) / (1.0 - CVAR_BETA)
+        norm.pdf(z)
+        / (1.0 - CVAR_BETA)
     )
 
     for _, row in edges_input_gdf.iterrows():
 
         u = str(row["u"])
+
         v = str(row["v"])
 
-        if u.endswith('.0'):
+        if u.endswith(".0"):
             u = u[:-2]
 
-        if v.endswith('.0'):
+        if v.endswith(".0"):
             v = v[:-2]
 
         base_time = float(
             row.get(
                 "travel_time",
-                row["length"] / (30 * 1000 / 3600)
+                row["length"]
+                / (30 * 1000 / 3600),
             )
         )
 
         mu = float(
-            row.get(penalty_col, 0.0)
+            row.get(
+                penalty_col,
+                0.0,
+            )
         )
 
         sigma = float(
-            row.get(uncertainty_col, 0.0)
+            row.get(
+                uncertainty_col,
+                0.0,
+            )
         )
 
         planned_penalty = (
-            mu + cvar_multiplier * sigma
+            mu
+            + cvar_multiplier * sigma
         )
 
         planned_penalty = float(
-            np.clip(planned_penalty, 0, 1)
+            np.clip(
+                planned_penalty,
+                0,
+                1,
+            )
         )
 
         planned_cost = (
-            base_time *
-            (1 + ROUTING_ALPHA * planned_penalty)
+            base_time
+            * (
+                1
+                + ROUTING_ALPHA
+                * planned_penalty
+            )
         )
 
         edge_attrs = dict(
             length=float(row["length"]),
             travel_time=base_time,
             planned_cost=planned_cost,
-            planned_penalty=planned_penalty
+            planned_penalty=planned_penalty,
         )
 
         R.add_edge(
             u,
             v,
-            **edge_attrs
+            **edge_attrs,
         )
 
         oneway_val = str(
-            row.get("oneway", "no")
+            row.get(
+                "oneway",
+                "no",
+            )
         ).strip().lower()
 
         is_oneway = oneway_val in [
@@ -288,32 +352,44 @@ def build_routing_graph(
             "true",
             "1",
             "y",
-            "f"
+            "f",
         ]
 
-        if not is_oneway and ASSUME_BIDIRECTIONAL:
+        if (
+            not is_oneway
+            and ASSUME_BIDIRECTIONAL
+        ):
+
             R.add_edge(
                 v,
                 u,
-                **edge_attrs
+                **edge_attrs,
             )
 
     return R
 
 
-# ==========================================
-# 6. STARTUP
-# ==========================================
+# =====================================================
+# 7. STARTUP LOADING
+# =====================================================
+
 @app.on_event("startup")
 def load_resources():
+
     global model
+
     global nodes_gdf
+
     global edges_gdf
-    global osmid_to_latlon
+
     global tensors
-    global R_interactive
+
+    global osmid_to_latlon
 
     try:
+
+        print("Loading GeoDataFrames...")
+
         nodes_gdf = gpd.read_file(
             NODES_PATH
         )
@@ -321,6 +397,8 @@ def load_resources():
         edges_gdf = gpd.read_file(
             EDGES_PATH
         )
+
+        print("Converting nodes to WGS84...")
 
         nodes_wgs84 = nodes_gdf.to_crs(
             "EPSG:4326"
@@ -335,94 +413,148 @@ def load_resources():
 
             osmid_to_latlon[n_id] = (
                 row["geometry"].y,
-                row["geometry"].x
+                row["geometry"].x,
             )
+
+        print("Loading tensors...")
 
         tensors = torch.load(
             TENSORS_PATH,
-            map_location=device
+            map_location=device,
         )
 
         node_in_dim = (
             tensors["node_static_tensor"].shape[-1]
-            + len(tensors["rainfall_feature_names"])
+            + len(
+                tensors["rainfall_feature_names"]
+            )
         )
 
         edge_in_dim = (
             tensors["edge_static_tensor"].shape[-1]
-            + len(tensors["rainfall_feature_names"])
+            + len(
+                tensors["rainfall_feature_names"]
+            )
         )
+
+        print("Loading model...")
 
         model = GraphSAGEGRU(
             node_in_dim=node_in_dim,
-            edge_in_dim=edge_in_dim
+            edge_in_dim=edge_in_dim,
         ).to(device)
 
         model.load_state_dict(
             torch.load(
                 MODEL_PATH,
-                map_location=device
+                map_location=device,
             )
         )
 
         model.train()
 
-        R_interactive = build_routing_graph(
-            edges_gdf
-        )
-
-        print("Resources loaded successfully.")
+        print("Backend ready.")
 
     except Exception as e:
-        print(f"Startup warning: {e}")
+
+        print(
+            f"Startup error: {str(e)}"
+        )
 
 
-# ==========================================
-# 7. ROOT
-# ==========================================
+# =====================================================
+# 8. ROOT ROUTE
+# =====================================================
+
 @app.get("/")
-def read_root():
+def root():
+
     return {
-        "message": "Flood Routing ML Backend is running!"
+        "message":
+            "Flood Routing ML Backend is running!"
     }
 
 
-# ==========================================
-# 8. ROUTE PREDICTION
-# ==========================================
-@app.post("/predict_route")
-def predict_route(req: RouteRequest):
+# =====================================================
+# 9. PREDICT ROUTE
+# =====================================================
 
-    if nodes_gdf is None or model is None:
+@app.post("/predict_route")
+def predict_route(
+    req: RouteRequest
+):
+
+    global CVAR_BETA
+
+    if (
+        nodes_gdf is None
+        or edges_gdf is None
+    ):
+
         raise HTTPException(
             status_code=503,
-            detail="Model or data not loaded."
+            detail="Data not loaded.",
         )
 
     try:
-        # ----------------------------------
-        # Convert click coordinates
-        # ----------------------------------
+
+        # =========================================
+        # UPDATE RISK LEVEL
+        # =========================================
+
+        CVAR_BETA = req.risk
+
+        # =========================================
+        # DYNAMIC GRAPH
+        # =========================================
+
+        R_dynamic = build_routing_graph(
+            edges_gdf
+        )
+
+        # =========================================
+        # CONVERT CLICK POINTS
+        # =========================================
+
         orig_pt = gpd.GeoSeries(
-            [Point(req.origin[1], req.origin[0])],
-            crs="EPSG:4326"
-        ).to_crs(nodes_gdf.crs).iloc[0]
+            [
+                Point(
+                    req.origin[1],
+                    req.origin[0],
+                )
+            ],
+            crs="EPSG:4326",
+        ).to_crs(
+            nodes_gdf.crs
+        ).iloc[0]
 
         dest_pt = gpd.GeoSeries(
-            [Point(req.destination[1], req.destination[0])],
-            crs="EPSG:4326"
-        ).to_crs(nodes_gdf.crs).iloc[0]
+            [
+                Point(
+                    req.destination[1],
+                    req.destination[0],
+                )
+            ],
+            crs="EPSG:4326",
+        ).to_crs(
+            nodes_gdf.crs
+        ).iloc[0]
 
-        # ----------------------------------
-        # Find nearest graph nodes
-        # ----------------------------------
-        orig_idx = nodes_gdf.geometry.distance(
-            orig_pt
-        ).idxmin()
+        # =========================================
+        # NEAREST NODES
+        # =========================================
 
-        dest_idx = nodes_gdf.geometry.distance(
-            dest_pt
-        ).idxmin()
+        orig_idx = (
+            nodes_gdf.geometry.distance(
+                orig_pt
+            ).idxmin()
+        )
+
+        dest_idx = (
+            nodes_gdf.geometry.distance(
+                dest_pt
+            ).idxmin()
+        )
 
         orig_node = str(
             nodes_gdf.iloc[orig_idx]["osmid"]
@@ -438,83 +570,124 @@ def predict_route(req: RouteRequest):
         if dest_node.endswith(".0"):
             dest_node = dest_node[:-2]
 
-        global CVAR_BETA
+        # =========================================
+        # COMPUTE ROUTE
+        # =========================================
 
-        CVAR_BETA = req.risk
-        
-        # ----------------------------------
-        # Compute safest path
-        # ----------------------------------
         route_nodes = nx.shortest_path(
-            R_interactive,
+            R_dynamic,
             source=orig_node,
             target=dest_node,
-            weight="planned_cost"
+            weight="planned_cost",
         )
 
-        # ----------------------------------
-        # Route coordinates
-        # ----------------------------------
-        route_coords = [
-            osmid_to_latlon[n]
-            for n in route_nodes
-        ]
+        # =========================================
+        # ROUTE COORDINATES
+        # =========================================
 
-        # ----------------------------------
-        # High-risk edges
-        # ----------------------------------
+        route_coords = []
+
+        for n in route_nodes:
+
+            if n in osmid_to_latlon:
+
+                route_coords.append(
+                    osmid_to_latlon[n]
+                )
+
+        # =========================================
+        # ROUTE RISK EDGES
+        # =========================================
+
         risk_edges = []
 
-        for u, v, data in R_interactive.edges(data=True):
+        distance_km = 0
 
-            penalty = data.get(
+        total_travel_time = 0
+
+        risk_values = []
+
+        for i in range(
+            len(route_nodes) - 1
+        ):
+
+            u = route_nodes[i]
+
+            v = route_nodes[i + 1]
+
+            edge_data = (
+                R_dynamic.get_edge_data(
+                    u,
+                    v,
+                )
+            )
+
+            if not edge_data:
+                continue
+
+            edge_attrs = list(
+                edge_data.values()
+            )[0]
+
+            length_m = edge_attrs.get(
+                "length",
+                0,
+            )
+
+            travel_time = edge_attrs.get(
+                "travel_time",
+                0,
+            )
+
+            penalty = edge_attrs.get(
                 "planned_penalty",
-                0
+                0,
+            )
+
+            distance_km += (
+                length_m / 1000
+            )
+
+            total_travel_time += (
+                travel_time / 60
+            )
+
+            risk_values.append(
+                penalty
             )
 
             if penalty > 0.2:
 
                 if (
-                    u in osmid_to_latlon and
-                    v in osmid_to_latlon
+                    u in osmid_to_latlon
+                    and v in osmid_to_latlon
                 ):
+
                     risk_edges.append([
                         osmid_to_latlon[u],
-                        osmid_to_latlon[v]
+                        osmid_to_latlon[v],
                     ])
 
-        # ----------------------------------
-        # Metrics
-        # ----------------------------------
-        total_distance = 0
+        # =========================================
+        # AVERAGE RISK
+        # =========================================
 
-        for i in range(len(route_coords) - 1):
+        if len(risk_values) > 0:
 
-            lat1, lon1 = route_coords[i]
-            lat2, lon2 = route_coords[i + 1]
-
-            dx = lat2 - lat1
-            dy = lon2 - lon1
-
-            total_distance += np.sqrt(
-                dx * dx + dy * dy
+            avg_risk = float(
+                np.mean(risk_values)
             )
 
-        distance_km = total_distance * 111
+        else:
 
-        estimated_time_min = (
-            distance_km / 30
-        ) * 60
+            avg_risk = 0.0
 
-        avg_risk = np.mean([
-            d.get("planned_penalty", 0)
-            for _, _, d in R_interactive.edges(data=True)
-        ])
+        # =========================================
+        # RESPONSE
+        # =========================================
 
-        # ----------------------------------
-        # Response
-        # ----------------------------------
         return {
+
             "status": "success",
 
             "route": route_coords,
@@ -523,34 +696,39 @@ def predict_route(req: RouteRequest):
 
             "distance_km": round(
                 distance_km,
-                2
+                2,
             ),
 
             "estimated_time_min": round(
-                estimated_time_min,
-                1
+                total_travel_time,
+                1,
             ),
 
             "risk_score": round(
-                float(avg_risk),
-                3
+                avg_risk,
+                3,
             ),
 
+            "model_used": req.model,
+
+            "risk_beta": req.risk,
+
             "message":
-                f"Safest route computed from "
-                f"{orig_node} to {dest_node}"
+                f"Safest route computed "
+                f"from {orig_node} "
+                f"to {dest_node}",
         }
 
     except nx.NetworkXNoPath:
 
         raise HTTPException(
             status_code=404,
-            detail="No safe path found between the selected points."
+            detail="No safe path found.",
         )
 
     except Exception as e:
 
         raise HTTPException(
             status_code=500,
-            detail=str(e)
+            detail=str(e),
         )
