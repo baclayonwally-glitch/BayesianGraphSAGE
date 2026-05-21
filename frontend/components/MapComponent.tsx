@@ -11,8 +11,6 @@ import {
   ZoomControl,
 } from "react-leaflet";
 
-import "leaflet/dist/leaflet.css";
-
 import L from "leaflet";
 
 import {
@@ -25,19 +23,6 @@ import Sidebar from "./Sidebar";
 import { fetchRoute } from "@/lib/api";
 
 import { toast } from "sonner";
-
-delete (L.Icon.Default.prototype as any)._getIconUrl;
-
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl:
-    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-
-  iconUrl:
-    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-
-  shadowUrl:
-    "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-});
 
 const greenIcon = new L.Icon({
   iconUrl:
@@ -69,14 +54,17 @@ function ClickHandler({
   setOrigin,
   setDestination,
 }: any) {
+
   useMapEvents({
     click(e) {
+
       const coords: [number, number] = [
         e.latlng.lat,
         e.latlng.lng,
       ];
 
       if (!origin) {
+
         setOrigin(coords);
 
       } else if (!destination) {
@@ -104,9 +92,7 @@ export default function MapComponent() {
     useState<[number, number][]>([]);
 
   const [riskEdges, setRiskEdges] =
-    useState<
-      [[number, number], [number, number]][]
-    >([]);
+    useState<any[]>([]);
 
   const [loading, setLoading] =
     useState(false);
@@ -135,6 +121,7 @@ export default function MapComponent() {
   const calculateRoute = async () => {
 
     if (!origin || !destination) {
+
       toast.error(
         "Please select origin and destination."
       );
@@ -207,10 +194,6 @@ export default function MapComponent() {
   return (
     <div className="relative h-screen w-full">
 
-      {/* ===================================== */}
-      {/* SIDEBAR */}
-      {/* ===================================== */}
-
       <Sidebar
         origin={origin}
         destination={destination}
@@ -226,31 +209,19 @@ export default function MapComponent() {
         riskScore={riskScore}
       />
 
-      {/* ===================================== */}
-      {/* MAP */}
-      {/* ===================================== */}
-
       <MapContainer
         center={[10.3157, 123.8854]}
         zoom={13}
         zoomControl={false}
-        className="h-screen w-full z-0"
+        className="h-screen w-full"
       >
 
         <ZoomControl position="bottomright" />
 
-        {/* ===================================== */}
-        {/* MAP STYLE */}
-        {/* ===================================== */}
-
         <TileLayer
-          attribution="CartoDB"
+          attribution="CartoDB Voyager"
           url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
         />
-
-        {/* ===================================== */}
-        {/* CLICK HANDLER */}
-        {/* ===================================== */}
 
         <ClickHandler
           origin={origin}
@@ -259,26 +230,29 @@ export default function MapComponent() {
           setDestination={setDestination}
         />
 
-        {/* ===================================== */}
-        {/* RISK ROADS */}
-        {/* ===================================== */}
+        {/* FLOOD RISK ROADS */}
 
-        {riskEdges.map((edge, idx) => (
-          <Polyline
-            key={idx}
-            positions={edge}
-            pathOptions={{
-              color: "#ef4444",
-              weight: 5,
-              opacity: 0.7,
-              dashArray: "10 10",
-            }}
-          />
-        ))}
+        {riskEdges.map((edge, idx) => {
 
-        {/* ===================================== */}
+          if (!edge || edge.length < 2) {
+            return null;
+          }
+
+          return (
+            <Polyline
+              key={idx}
+              positions={edge}
+              pathOptions={{
+                color: "#ef4444",
+                weight: 4,
+                opacity: 0.7,
+                dashArray: "8 10",
+              }}
+            />
+          );
+        })}
+
         {/* ORIGIN */}
-        {/* ===================================== */}
 
         {origin && (
           <>
@@ -303,9 +277,7 @@ export default function MapComponent() {
           </>
         )}
 
-        {/* ===================================== */}
         {/* DESTINATION */}
-        {/* ===================================== */}
 
         {destination && (
           <>
@@ -330,13 +302,10 @@ export default function MapComponent() {
           </>
         )}
 
-        {/* ===================================== */}
         {/* SAFE ROUTE */}
-        {/* ===================================== */}
 
         {route.length > 0 && (
           <>
-            {/* Glow */}
             <Polyline
               positions={route}
               pathOptions={{
@@ -346,15 +315,12 @@ export default function MapComponent() {
               }}
             />
 
-            {/* Main Route */}
             <Polyline
               positions={route}
               pathOptions={{
                 color: "#06b6d4",
                 weight: 7,
                 opacity: 1,
-                lineCap: "round",
-                lineJoin: "round",
               }}
             />
           </>
@@ -362,9 +328,7 @@ export default function MapComponent() {
 
       </MapContainer>
 
-      {/* ===================================== */}
       {/* LEGEND */}
-      {/* ===================================== */}
 
       <div
         className="
@@ -372,8 +336,7 @@ export default function MapComponent() {
           bottom-5
           right-5
           z-[1000]
-          bg-white/90
-          backdrop-blur-md
+          bg-white/95
           rounded-2xl
           shadow-2xl
           border
@@ -392,7 +355,7 @@ export default function MapComponent() {
           <div className="flex items-center gap-3">
             <div className="w-6 h-2 rounded-full bg-cyan-500" />
 
-            <span className="text-slate-700">
+            <span>
               Safe Route
             </span>
           </div>
@@ -400,7 +363,7 @@ export default function MapComponent() {
           <div className="flex items-center gap-3">
             <div className="w-6 h-2 rounded-full bg-red-500" />
 
-            <span className="text-slate-700">
+            <span>
               Flood-Risk Roads
             </span>
           </div>
@@ -408,7 +371,7 @@ export default function MapComponent() {
           <div className="flex items-center gap-3">
             <div className="w-4 h-4 rounded-full bg-green-500" />
 
-            <span className="text-slate-700">
+            <span>
               Origin
             </span>
           </div>
@@ -416,7 +379,7 @@ export default function MapComponent() {
           <div className="flex items-center gap-3">
             <div className="w-4 h-4 rounded-full bg-red-400" />
 
-            <span className="text-slate-700">
+            <span>
               Destination
             </span>
           </div>
